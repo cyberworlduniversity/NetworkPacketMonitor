@@ -29,8 +29,51 @@ public class NetworkPacketMonitor {
             22, 23, 445, 3389, 4444, 5555, 6666, 7777, 8080, 9001
     ));
 
-    // Simple rate-limit tracker: IP → packet count in the last window
-    private static final Map<String, AtomicLong> ipPacketCount = new ConcurrentHashMap<>();
+    // Bounded per-source sliding-window counters.
+    private static final long RATE_WINDOW_MS = 10_000L;
+    private static final long RATE_ENTRY_TTL_MS = 60_000L;
+    private static final int MAX_TRACKED_IPS = 4096;
+    private static final Map<String, RateWindow> ipPacketCount = new ConcurrentHashMap<>();
+
+    static final class RateWindow {
+        private long windowStart;
+        private long lastSeen;
+        private int count;
+
+        RateWindow(long now) {
+            windowStart = now;
+            lastSeen = now;
+        }
+
+        synchronized int record(long now) {
+            if (now - windowStart >= RATE_WINDOW_MS || now < windowStart) {
+                windowStart = now;
+                count = 0;
+            }
+            lastSeen = now;
+            return ++count;
+        }
+
+        synchronized long lastSeen() { return lastSeen; }
+        synchronized int count() { return count; }
+    }
+
+    static int recordSourcePacket(String sourceIp, long now) {
+        RateWindow counter = ipPacketCount.get(sourceIp);
+        if (counter == null) {
+            if (ipPacketCount.size() >= MAX_TRACKED_IPS) pruneRateCounters(now);
+            if (ipPacketCount.size() >= MAX_TRACKED_IPS) return 0;
+            RateWindow fresh = new RateWindow(now);
+            RateWindow previous = ipPacketCount.putIfAbsent(sourceIp, fresh);
+            counter = previous == null ? fresh : previous;
+        }
+        return counter.record(now);
+    }
+
+    static void pruneRateCounters(long now) {
+        ipPacketCount.entrySet().removeIf(entry ->
+                now - entry.getValue().lastSeen() > RATE_ENTRY_TTL_MS);
+    }
 
     // ── Entry point ─────────────────────────────────────────────────────────
     public static void main(String[] args) throws Exception {
@@ -53,35 +96,53 @@ public class NetworkPacketMonitor {
                             : "No description");
         }
 
-        // Use the first interface by default (or override via CLI arg)
+        // Default to non-promiscuous capture; broader capture requires explicit opt-in.
         int ifaceIndex = 0;
-        if (args.length > 0) {
-            try { ifaceIndex = Integer.parseInt(args[0]); }
-            catch (NumberFormatException ignored) {}
+        boolean promiscuous = false;
+        for (String arg : args) {
+            if ("--promiscuous".equals(arg)) {
+                promiscuous = true;
+            } else {
+                try {
+                    ifaceIndex = Integer.parseInt(arg);
+                } catch (NumberFormatException e) {
+                    System.err.println("[ERROR] Usage: NetworkPacketMonitor [interface-index] [--promiscuous]");
+                    return;
+                }
+            }
+        }
+        if (ifaceIndex < 0 || ifaceIndex >= allDevs.size()) {
+            System.err.printf("[ERROR] Interface index must be between 0 and %d.%n", allDevs.size() - 1);
+            return;
         }
 
         PcapNetworkInterface nif = allDevs.get(ifaceIndex);
         System.out.printf("%nCapturing on: %s%n", nif.getName());
-        System.out.println("Press Ctrl+C to stop.\n");
+        System.out.printf("Capture mode: %s%n", promiscuous ? "PROMISCUOUS (explicit opt-in)" : "NON-PROMISCUOUS");
+        System.out.println("Press Ctrl+C to stop.\\n");
 
-        // Open the interface in promiscuous mode, 65536-byte snap length, 10 ms timeout
-        try (PcapHandle handle = nif.openLive(65536, PcapNetworkInterface.PromiscuousMode.PROMISCUOUS, 10)) {
-
-            // Background thread: print stats every 10 seconds
+        PcapNetworkInterface.PromiscuousMode captureMode = promiscuous
+                ? PcapNetworkInterface.PromiscuousMode.PROMISCUOUS
+                : PcapNetworkInterface.PromiscuousMode.NONPROMISCUOUS;
+        try (PcapHandle handle = nif.openLive(65536, captureMode, 10)) {
             ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-            scheduler.scheduleAtFixedRate(NetworkPacketMonitor::printStats, 10, 10, TimeUnit.SECONDS);
+            try {
+                scheduler.scheduleAtFixedRate(() -> {
+                    pruneRateCounters(System.currentTimeMillis());
+                    printStats();
+                }, 10, 10, TimeUnit.SECONDS);
 
-            // Capture loop
-            handle.loop(-1, (RawPacketListener) rawPacket -> {
-                try {
-                    Packet packet = EthernetPacket.newPacket(rawPacket, 0, rawPacket.length);
-                    analyzePacket(packet, rawPacket.length);
-                } catch (Exception e) {
-                    // Silently skip malformed packets
-                }
-            });
-
-            scheduler.shutdownNow();
+                handle.loop(-1, (RawPacketListener) rawPacket -> {
+                    try {
+                        Packet packet = EthernetPacket.newPacket(rawPacket, 0, rawPacket.length);
+                        analyzePacket(packet, rawPacket.length);
+                    } catch (Exception ignored) {
+                        // Skip malformed or unsupported frames without terminating capture.
+                    }
+                });
+            } finally {
+                scheduler.shutdownNow();
+            }
         }
     }
 
@@ -134,7 +195,7 @@ public class NetworkPacketMonitor {
         }
 
         // Rate-limit tracking per source IP
-        ipPacketCount.computeIfAbsent(srcIp, k -> new AtomicLong(0)).incrementAndGet();
+        recordSourcePacket(srcIp, System.currentTimeMillis());
 
         // Print packet summary
         String suspicious = detectSuspicious(srcIp, dstPort);
@@ -157,8 +218,8 @@ public class NetworkPacketMonitor {
         }
 
         // Flag IPs sending more than 200 packets (simple flood heuristic)
-        AtomicLong count = ipPacketCount.get(srcIp);
-        if (count != null && count.get() > 200) {
+        RateWindow count = ipPacketCount.get(srcIp);
+        if (count != null && count.count() > 200) {
             warnings.append(" ⚠ HIGH PACKET RATE FROM ").append(srcIp);
         }
 
