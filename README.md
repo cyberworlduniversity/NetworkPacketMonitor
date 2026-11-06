@@ -232,3 +232,14 @@ flowchart TD
     G --> H[Display results and exit]
     E --> H
 ```
+
+
+## Capture scope and resource safeguards
+
+The monitor uses **non-promiscuous capture by default**, limiting capture to traffic delivered to the selected interface. Enable broader segment capture only when explicitly authorized:
+
+```bash
+sudo mvn exec:java -Dexec.mainClass=NetworkPacketMonitor -Dexec.args="0 --promiscuous"
+```
+
+The interface index is validated before capture starts. Flood warnings use a 10-second per-source window, and stale source entries are pruned so long-running sessions do not accumulate an unbounded address map.
