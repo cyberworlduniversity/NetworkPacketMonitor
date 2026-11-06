@@ -22,8 +22,9 @@ class NetworkPacketMonitorTest {
     @Test
     void invalidInterfaceIndexIsRejectedByBoundsCheck() {
         int interfaceCount = 2;
-        assertFalse(0 < 0 || 0 >= interfaceCount);
-        assertTrue(-1 < 0 || -1 >= interfaceCount);
-        assertTrue(2 < 0 || 2 >= interfaceCount);
+        assertTrue(NetworkPacketMonitor.isValidInterfaceIndex(0, interfaceCount));
+        assertTrue(NetworkPacketMonitor.isValidInterfaceIndex(1, interfaceCount));
+        assertFalse(NetworkPacketMonitor.isValidInterfaceIndex(-1, interfaceCount));
+        assertFalse(NetworkPacketMonitor.isValidInterfaceIndex(2, interfaceCount));
     }
 }
