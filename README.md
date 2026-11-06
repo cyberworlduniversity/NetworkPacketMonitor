@@ -1,5 +1,15 @@
 # 📡 Network Packet Monitor (Java)
 
+
+## Get this repository
+
+Clone the current project (this repository's canonical GitHub URL), then follow the installation and usage steps below.
+
+```bash
+git clone https://github.com/cyberworlduniversity/NetworkPacketMonitor.git
+cd NetworkPacketMonitor
+```
+
 > A real-time network packet capture and analysis tool built in Java using the **pcap4j** library.
 
 ---
