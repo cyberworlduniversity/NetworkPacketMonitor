@@ -74,8 +74,8 @@ public class NetworkPacketMonitor {
             // Capture loop
             handle.loop(-1, (RawPacketListener) rawPacket -> {
                 try {
-                    Packet packet = EthernetPacket.newPacket(rawPacket.getRawData(), 0, rawPacket.getRawData().length);
-                    analyzePacket(packet, rawPacket.getRawData().length);
+                    Packet packet = EthernetPacket.newPacket(rawPacket, 0, rawPacket.length);
+                    analyzePacket(packet, rawPacket.length);
                 } catch (Exception e) {
                     // Silently skip malformed packets
                 }
