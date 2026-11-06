@@ -58,6 +58,10 @@ public class NetworkPacketMonitor {
         synchronized int count() { return count; }
     }
 
+    static boolean isValidInterfaceIndex(int index, int interfaceCount) {
+        return index >= 0 && index < interfaceCount;
+    }
+
     static int recordSourcePacket(String sourceIp, long now) {
         RateWindow counter = ipPacketCount.get(sourceIp);
         if (counter == null) {
@@ -111,7 +115,7 @@ public class NetworkPacketMonitor {
                 }
             }
         }
-        if (ifaceIndex < 0 || ifaceIndex >= allDevs.size()) {
+        if (!isValidInterfaceIndex(ifaceIndex, allDevs.size())) {
             System.err.printf("[ERROR] Interface index must be between 0 and %d.%n", allDevs.size() - 1);
             return;
         }
