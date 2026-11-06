@@ -184,3 +184,51 @@ flowchart TD
     J --> K[Print packet summary]
     K --> G
 ```
+
+
+## Repository Quick Start
+
+Clone the canonical repository:
+
+```bash
+git clone https://github.com/cyberworlduniversity/NetworkPacketMonitor.git
+cd NetworkPacketMonitor
+```
+
+### Requirements and installation
+
+- Install JDK 11+ (JDK 8+ for this standalone port scanner) and Maven where applicable.
+
+```bash
+Maven resolves the dependencies declared in pom.xml.
+```
+
+### Build / run
+
+```bash
+mvn --batch-mode package
+```
+
+Run the packaged application using the main class and launch instructions in the project scripts or Maven configuration.
+
+### Validation
+
+```bash
+mvn --batch-mode test
+```
+
+Live packet capture may require administrator/root privileges; capture only authorized traffic.
+
+### Program flow
+
+```mermaid
+flowchart TD
+    A[Start] --> B[Initialize application]
+    B --> C[Select interface or input]
+    C --> D{Ready to process?}
+    D -- No --> E[Report setup or input issue]
+    D -- Yes --> F[Run NetworkPacketMonitor operation]
+    F --> G[Summarize findings]
+    G --> H[Display results and exit]
+    E --> H
+```
