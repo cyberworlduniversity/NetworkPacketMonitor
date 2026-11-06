@@ -58,9 +58,15 @@ NetworkPacketMonitor/
 | libpcap | Linux: `sudo apt install libpcap-dev` / macOS: pre-installed |
 | Npcap | Windows: download from [npcap.com](https://npcap.com) |
 
-### 2. Add pcap4j Dependency
+### 2. Install Project Dependencies
 
-**Maven (`pom.xml`):**
+A Maven `pom.xml` is included. Install dependencies and compile with:
+
+```bash
+mvn --batch-mode package
+```
+
+**Manual dependency reference (if not using Maven):**
 ```xml
 <dependency>
     <groupId>org.pcap4j</groupId>
@@ -83,14 +89,16 @@ implementation 'org.pcap4j:pcap4j-packetfactory-static:1.8.2'
 ### 3. Compile
 
 ```bash
-javac -cp pcap4j-core-1.8.2.jar:pcap4j-packetfactory-static-1.8.2.jar NetworkPacketMonitor.java
+mvn --batch-mode package
 ```
+
+The compiled class is written to `target/classes/`.
 
 ### 4. Run (requires root / administrator privileges)
 
 ```bash
 # Linux / macOS
-sudo java -cp .:pcap4j-core-1.8.2.jar:pcap4j-packetfactory-static-1.8.2.jar NetworkPacketMonitor
+sudo mvn exec:java -Dexec.mainClass=NetworkPacketMonitor
 
 # Specify interface index (e.g., interface 1)
 sudo java -cp ... NetworkPacketMonitor 1
@@ -148,3 +156,21 @@ The monitor automatically flags:
 ## 📄 License
 
 MIT License — free to use, modify, and distribute with attribution.
+
+
+## 🔄 Program Flow
+
+```mermaid
+flowchart TD
+    A[Start] --> B[Discover network interfaces]
+    B --> C{Interfaces available?}
+    C -- No --> D[Show error and exit]
+    C -- Yes --> E[Select interface]
+    E --> F[Open packet capture]
+    F --> G[Capture packets]
+    G --> H[Parse Ethernet and IP layers]
+    H --> I[Classify TCP UDP ICMP]
+    I --> J[Update counters and detect alerts]
+    J --> K[Print packet summary]
+    K --> G
+```
